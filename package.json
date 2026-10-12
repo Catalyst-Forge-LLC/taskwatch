@@ -5,7 +5,7 @@
   "type": "module",
   "imports": { "#lib/*": "./src/lib/*" },
   "scripts": {
-    "dev": "vite dev --host 127.0.0.1 --port 5187 --strictPort",
+    "dev": "vite dev",
     "build": "vite build",
     "start": "node scripts/start.mjs",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",

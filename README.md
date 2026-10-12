@@ -14,7 +14,8 @@ npm install
 npm run dev
 ```
 
-Open http://127.0.0.1:5187. Stop the server with Ctrl+C.
+Open http://127.0.0.1:5211 (or the port printed by `localslip get taskwatch`).
+Stop the server with Ctrl+C.
 
 For a built version:
 
@@ -23,9 +24,50 @@ npm run build
 npm start
 ```
 
-Both modes bind to `127.0.0.1:5187` by default. For the production server,
+Both modes read the named `taskwatch` port from LocalSlip and bind to
+`127.0.0.1`. If LocalSlip is unavailable or the claim is missing, they warn and
+fall back to port **5211**. A busy port causes startup to fail rather than moving
+to a different port. For the production server,
 `HOST` and `PORT` can override these defaults. This is a single-user local app;
 it has no authentication and is not intended for public hosting.
+
+## LocalSlip and LocalHelm
+
+This workspace enrolls `taskwatch` in `Z:\workspace\localhelm.fleet.json`.
+Its LocalSlip claim records port **5211**, bind **127.0.0.1**, working directory
+`Z:\workspace\taskwatch`, and start command **`npm run dev`**. LocalHelm's Ports
+board uses that claim and recipe to start and stop the app.
+
+To recreate the setup on another machine (adjust paths as needed):
+
+```powershell
+localslip claim taskwatch --port 5211 --bind 127.0.0.1 --cwd Z:\workspace\taskwatch --command "npm run dev"
+cd Z:\workspace
+localhelm enroll ./taskwatch --apply
+```
+
+Taskwatch is also marked local-only in the workspace's
+`.localhelm/local-only.json`. On a new machine, choose **Local only** for its
+row in the LocalHelm board. Manage it from the operator board at
+http://127.0.0.1:4321, or directly:
+
+```powershell
+localslip get taskwatch
+localslip start taskwatch
+localslip stop taskwatch
+```
+
+The equivalent LocalHelm commands are:
+
+```powershell
+cd Z:\workspace
+localhelm plugin localslip start taskwatch --apply --no-commit
+localhelm plugin localslip stop taskwatch --apply --no-commit
+```
+
+Start only one of the managed dev server or `npm start` at a time. LocalHelm
+enrolls this private app for repository status and lifecycle management; it has
+no npm release target and Publish must remain skipped for its private package.
 
 ## Your data
 
