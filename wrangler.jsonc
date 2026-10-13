@@ -4,6 +4,7 @@
   "account_id": "d92b3c93d7be05acbea87c97b5ead9c4",
   "compatibility_date": "2026-10-13",
   "workers_dev": true,
+  "routes": [{ "pattern": "taskwatch.dev", "custom_domain": true }],
   "assets": {
     "directory": "./build",
     "not_found_handling": "404-page"

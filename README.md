@@ -88,7 +88,7 @@ calculation from its saved timestamp.
 
 ## Cloudflare deployment
 
-Public app: **https://taskwatch.sam-d92.workers.dev**. The Worker is deployed to
+Public app: **https://taskwatch.dev** (also https://taskwatch.sam-d92.workers.dev). The Worker is deployed to
 the account recorded in `wrangler.jsonc`; task history remains in each visitor's browser.
 
 ```powershell
