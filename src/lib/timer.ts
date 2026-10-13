@@ -8,7 +8,7 @@ export type Entry = {
   segments: Segment[];
 };
 export type WatchState = { version: 1; revision: number; entries: Entry[] };
-export type Action = 'start' | 'pause' | 'resume' | 'stop' | 'rename' | 'delete';
+export type Action = 'start' | 'pause' | 'resume' | 'stop' | 'rename' | 'delete' | 'import';
 
 export function activeEntry(state: WatchState): Entry | undefined {
   return state.entries.find((entry) => entry.stoppedAt === null);

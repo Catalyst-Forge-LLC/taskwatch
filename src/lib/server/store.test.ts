@@ -93,4 +93,15 @@ describe('durable task stopwatch', () => {
     expect(todayElapsed((await store.read()).entries, now)).toBe(20_000);
     expect(duration(100 * 3600_000 + 62_000)).toBe('100:01:02');
   });
+
+  it('imports compatible browser history atomically without adopting its revision', async () => {
+    await store.mutate({ action: 'start', revision: 0, label: 'From browser' });
+    const exported = await store.read();
+    exported.revision = 87;
+    const imported = await store.mutate({ action: 'import', revision: 1, data: exported });
+    expect(imported.revision).toBe(2);
+    expect(imported.entries[0].label).toBe('From browser');
+    await expect(store.mutate({ action: 'import', revision: 2, data: { version: 2 } })).rejects.toMatchObject({ status: 400 });
+    expect(await store.read()).toEqual(imported);
+  });
 });

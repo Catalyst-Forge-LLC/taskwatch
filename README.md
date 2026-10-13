@@ -1,118 +1,157 @@
 # Taskwatch
 
-A small, local SvelteKit stopwatch. Name a task, start the clock, pause when you
-need to, and stop to save it. Includes a large timer, editable labels, searchable
-history, individual work intervals, a daily total, and JSON export.
-
-## Run locally
-
-Requires Node.js 22.17+ (Node 24 recommended) and npm.
+A small task stopwatch with labels, pause/resume, dated history, daily totals,
+work intervals, and JSON import/export. One timer engine supports two storage modes.
+Requires Node.js **22.17+** (24 recommended) and npm. Scripts also work through pnpm.
 
 ```powershell
 cd Z:\workspace\taskwatch
 npm install
-npm run dev
 ```
 
-Open http://127.0.0.1:5211 (or the port printed by `localslip get taskwatch`).
-Stop the server with Ctrl+C.
-
-For a built version:
+## Local app: JSON file
 
 ```powershell
-npm run build
+npm run dev
+# Or use the built Node server:
+npm run build:node
 npm start
 ```
 
-Both modes read the named `taskwatch` port from LocalSlip and bind to
-`127.0.0.1`. If LocalSlip is unavailable or the claim is missing, they warn and
-fall back to port **5211**. A busy port causes startup to fail rather than moving
-to a different port. For the production server,
-`HOST` and `PORT` can override these defaults. This is a single-user local app;
-it has no authentication and is not intended for public hosting.
+The local app stays on LocalSlip's `taskwatch` port, currently
+**http://127.0.0.1:5211**. It uses `/api/watch` and creates `data/taskwatch.json`
+on the first action. That directory is ignored by Git. Node output is **`build-node/`**.
+Stop a foreground server with Ctrl+C. Run only one server per data file.
+
+Both dev and Node startup read `localslip get taskwatch`; if unavailable they
+warn and use 5211. A busy port fails rather than moving to another port. Production
+startup accepts `HOST` and `PORT`. `TASKWATCH_DATA_FILE` selects an alternative
+JSON file; relative paths resolve from the working directory. This mode has no
+authentication and is intended for loopback use on your own computer.
+
+File writes are serialized, revision-checked, and replace the file atomically
+through a temporary file in the same folder. Invalid files are never silently
+reset. To restore a corrupt local file, stop the server, back it up, replace it
+with a valid export, and restart.
+
+## Public app: browser storage
+
+```powershell
+npm run dev:browser
+```
+
+This uses the same LocalSlip port; stop file mode first. Alternatively set
+`TASKWATCH_STORAGE=browser` before `npm run dev`.
+
+```powershell
+npm run build
+npm run preview
+```
+
+The default build is a prerendered static site in **`build/`**, previewed at
+**http://127.0.0.1:5212**. Its separate route tree excludes the API. A post-build
+check rejects API references, Node storage code, and private data in public assets.
+The two modes keep separate build and intermediate directories.
+
+Browser mode uses `localStorage` key **`taskwatch.v1`**. No task content is sent
+to a backend. Web Locks serialize changes across tabs; revisions reject stale
+updates; storage events refresh other tabs. Writes require a current browser on
+HTTPS or localhost. Unsupported locking, full storage, and blocked storage fail
+safely rather than reporting an unsaved action as successful.
+
+- Closing the tab does not stop an active timer. Pause or stop before leaving.
+- Clearing site data removes history. Export JSON regularly for a backup.
+- Private browsing may discard history when the session ends.
+- Browsers, devices, and origins do not share or sync history.
+- A workers.dev address and a custom domain have separate storage. Export from
+  the old address and import at the new one when moving.
+- Corrupt browser history is preserved. Export its raw backup first, then
+  explicitly confirm importing a valid replacement if recovery is needed.
+
+The public app includes a privacy page and no third-party scripts, remote fonts,
+or analytics beacon. Security headers block external scripts and connections.
+Cloudflare still processes normal HTTP request metadata to serve the site.
+
+## Import and export
+
+Both modes use `{ version, revision, entries }`. Each entry has UTC ISO timestamps,
+elapsed milliseconds, and individual work intervals. Pauses are excluded. While
+running, `elapsedMs` reflects completed intervals; the open interval is added live
+from its saved start time. Times display in the browser's timezone. The daily
+total counts work overlapping today, including tasks spanning midnight.
+
+**Import JSON** validates files up to 1 MB, previews the count and any unfinished
+timer, and requires confirmation before replacing the whole history. Export the
+current history first if you need it. Import preserves the destination revision
+sequence. It does not merge. A running imported timer resumes its elapsed-time
+calculation from its saved timestamp.
+
+## Cloudflare deployment
+
+Public app: **https://taskwatch.sam-d92.workers.dev**. The Worker is deployed to
+the account recorded in `wrangler.jsonc`; task history remains in each visitor's browser.
+
+```powershell
+npx wrangler login
+npx wrangler whoami
+npm run ship
+```
+
+`ship` builds and checks public assets, then deploys the **`taskwatch`** Worker
+using `wrangler.jsonc`. Only **`build/`** is deployed. There is no Worker script,
+server-side task API, database, or task-data upload. Static asset requests and
+asset storage are free under [Cloudflare's billing rules](https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/).
+No paid plan is needed for this app; domain registration is a separate cost.
+
+Verify the authenticated account and check for an existing Worker with that name
+before first deploy. Do not overwrite another project. Credentials belong outside
+this repository.
+
+### Custom domain
+
+Use an active Cloudflare zone in the deployment account. In the dashboard:
+**Workers & Pages → taskwatch → Settings → Domains & Routes → Add → Custom Domain**.
+Cloudflare creates DNS and the HTTPS certificate. Keep the domain in
+`wrangler.jsonc` so subsequent deployments retain it:
+
+```jsonc
+"routes": [{ "pattern": "YOUR-DOMAIN.example", "custom_domain": true }]
+```
+
+Replace the example with your chosen hostname. Check what an existing hostname
+serves before changing it. [Custom-domain instructions](https://developers.cloudflare.com/workers/configuration/routing/custom-domains/).
 
 ## LocalSlip and LocalHelm
 
-This workspace enrolls `taskwatch` in `Z:\workspace\localhelm.fleet.json`.
-Its LocalSlip claim records port **5211**, bind **127.0.0.1**, working directory
-`Z:\workspace\taskwatch`, and start command **`npm run dev`**. LocalHelm's Ports
-board uses that claim and recipe to start and stop the app.
-
-To recreate the setup on another machine (adjust paths as needed):
+The workspace enrolls `taskwatch` in `Z:\workspace\localhelm.fleet.json`. Its
+LocalSlip claim uses port **5211**, loopback bind, cwd **`Z:\workspace\taskwatch`**,
+and command **`npm run dev`**. LocalHelm's Ports board continues to start local
+**file-storage** mode.
 
 ```powershell
 localslip claim taskwatch --port 5211 --bind 127.0.0.1 --cwd Z:\workspace\taskwatch --command "npm run dev"
 cd Z:\workspace
 localhelm enroll ./taskwatch --apply
-```
-
-Taskwatch is also marked local-only in the workspace's
-`.localhelm/local-only.json`. On a new machine, choose **Local only** for its
-row in the LocalHelm board. Manage it from the operator board at
-http://127.0.0.1:4321, or directly:
-
-```powershell
-localslip get taskwatch
-localslip start taskwatch
-localslip stop taskwatch
-```
-
-The equivalent LocalHelm commands are:
-
-```powershell
-cd Z:\workspace
 localhelm plugin localslip start taskwatch --apply --no-commit
 localhelm plugin localslip stop taskwatch --apply --no-commit
 ```
 
-Start only one of the managed dev server or `npm start` at a time. LocalHelm
-enrolls this private app for repository status and lifecycle management; it has
-no npm release target and Publish must remain skipped for its private package.
+Direct equivalents: `localslip start taskwatch` and `localslip stop taskwatch`.
+Do not run both storage modes on the same port. LocalHelm **Ship** discovers the
+root `ship` command for the public site. The app remains private; npm Publish
+must stay skipped. There is no npm package release target.
 
-## Your data
-
-The server creates **`data/taskwatch.json`** on the first timer action. This file
-contains all entries and the active timer; browser storage is not used. Back it
-up like any other document. The data directory is excluded from Git.
-
-- Start, pause, resume, stop, rename, and delete save immediately. Successful
-  saves replace the file atomically through a temporary file in the same folder.
-- Refreshing or closing the browser does not stop the timer. Restarting the
-  server also restores it. **Pause or stop before leaving if you don't want that
-  time counted.** A paused timer stays paused across restarts.
-- Each entry stores a label, UTC ISO start/stop timestamps, elapsed milliseconds,
-  and an array of work intervals with their own start/stop timestamps. Pauses are
-  excluded from elapsed time. While running, `elapsedMs` reflects completed
-  intervals; the open interval is added live from its `startedAt` timestamp.
-- Dates and times display in your browser's local timezone. The daily total
-  counts work intervals overlapping today, including tasks spanning midnight.
-- Multiple tabs refresh every five seconds and reject conflicting changes.
-  Run **one server process per data file**. Don't edit the file while the server
-  is running. An invalid file produces an error and is never silently reset.
-- Export JSON downloads a snapshot, including any active task. Delete requires
-  confirmation and only works for stopped tasks. Export first if you need a backup.
-
-To choose another data file, set `TASKWATCH_DATA_FILE` before starting. Relative
-paths resolve from the server's working directory; use an absolute path for a
-fixed location:
-
-```powershell
-$env:TASKWATCH_DATA_FILE = 'Z:\workspace\taskwatch\data\my-time.json'
-npm start
-```
-
-To restore an export, stop the server, back up the current JSON, then replace it
-with the exported file and restart.
-
-## Development
+## Verification
 
 ```powershell
 npm run check
 npm test
+npm run build:node
 npm run build
+npm run cf:types
+npx wrangler deploy --dry-run
 ```
 
-Built with Svelte 5, SvelteKit, TypeScript, and the Node adapter. No external
-services, account, database, or remote fonts are needed. This private local app
-has no npm publication target. Node adapter configuration follows the
-[SvelteKit documentation](https://svelte.dev/docs/kit/adapter-node).
+Tests cover file timing and restarts, pauses, midnight overlap, revisions,
+corrupt data, browser locking and write failures, and import compatibility.
+Public builds never overwrite local data or the `build-node/` server.

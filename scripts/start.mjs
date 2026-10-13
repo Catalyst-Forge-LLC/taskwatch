@@ -6,7 +6,8 @@ const port = process.env.PORT ? Number(process.env.PORT) : taskwatchPort();
 // adapter-node assumes HTTPS by default. This local server uses HTTP, so supply
 // its protocol explicitly and overwrite the header rather than trusting clients.
 process.env.PROTOCOL_HEADER = 'x-taskwatch-protocol';
-const { handler } = await import('../build/handler.js');
+process.env.BODY_SIZE_LIMIT ??= '2M';
+const { handler } = await import('../build-node/handler.js');
 createServer((request, response) => {
   request.headers['x-taskwatch-protocol'] = 'http';
   handler(request, response);

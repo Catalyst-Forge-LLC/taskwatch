@@ -1,6 +1,9 @@
 node_modules/
 .svelte-kit/
 build/
+build-node/
+.wrangler/
+worker-configuration.d.ts
 data/
 .env
 .env.*
