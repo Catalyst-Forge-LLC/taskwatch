@@ -4,6 +4,8 @@
   import { browserMode, getStorage } from '#lib/storage/index.ts';
   import { validate, StoreError } from '#lib/engine.ts';
   import type { Storage } from '#lib/storage/types.ts';
+  import Footer from '#lib/Footer.svelte';
+  import { tooltip } from '#lib/tooltip.ts';
 
   let storage: Storage | undefined;
   let pendingImport = $state<{ name: string; state: WatchState } | null>(null);
@@ -19,6 +21,7 @@
   let editing = $state<string | null>(null);
   let editLabel = $state('');
   let deleting = $state<string | null>(null);
+  let lastSaved = $state<string | null>(null);
   const active = $derived(activeEntry(watch));
   const running = $derived(active?.segments.at(-1)?.stoppedAt === null);
   const completed = $derived(watch.entries.filter((entry) => entry.stoppedAt !== null));
@@ -48,6 +51,7 @@
     message = '';
     try {
       const payload = await storage.mutate({ action, revision: watch.revision, ...extra });
+      lastSaved = action === 'stop' ? active?.id ?? null : null;
       apply(payload);
       editing = null;
       deleting = null;
@@ -137,20 +141,23 @@
         <label class="sr-only" for="task-label">Task name</label>
         <div class="label-row"><input id="task-label" bind:value={label} maxlength="160" placeholder="What are you working on?" autocomplete="off" disabled={busy || !ready} />{#if active && label.trim() !== active.label}<button class="small-button" disabled={busy || !label.trim()} type="submit">Save</button>{/if}</div>
       </form>
-      <div class="digits" class:muted={active && !running} role="timer" aria-label="Elapsed working time">{active ? duration(elapsed(active, now)) : '00:00:00'}</div>
+      <div class="digits" class:muted={active && !running} class:running role="timer" aria-label="Elapsed working time">{#each (active ? duration(elapsed(active, now)) : '00:00:00').split(':') as part, index}{#if index}<span class="colon">:</span>{/if}<span>{part}</span>{/each}</div>
       <div class="controls">
         {#if !active}
-          <button class="primary" onclick={() => act('start', { label })} disabled={busy || !ready || !label.trim()}>{@render icon('play', 24)} Start</button>
+          <!-- The focusable wrapper explains why its disabled button cannot start yet. -->
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+          <span class="start-trigger" role="group" aria-label="Start stopwatch" tabindex={!label.trim() && ready ? 0 : -1} use:tooltip={!label.trim() ? 'Enter what you are working on above before starting.' : 'Start timing this task.'}><button class="primary" onclick={() => act('start', { label })} disabled={busy || !ready || !label.trim()} aria-describedby={!label.trim() ? 'start-hint' : undefined}>{@render icon('play', 24)} Start</button></span>
+          <span id="start-hint" class="sr-only">Enter a task name first.</span>
         {:else}
-          <button class="primary" onclick={() => act(running ? 'pause' : 'resume')} disabled={busy}>{@render icon(running ? 'pause' : 'play', 24)} {running ? 'Pause' : 'Resume'}</button>
-          <button class="secondary" onclick={() => act('stop')} disabled={busy}>{@render icon('stop', 22)} Stop</button>
+          <button class="primary" use:tooltip={running ? 'Pause without counting your break.' : 'Continue this task. Paused time stays excluded.'} onclick={() => act(running ? 'pause' : 'resume')} disabled={busy}>{@render icon(running ? 'pause' : 'play', 24)} {running ? 'Pause' : 'Resume'}</button>
+          <button class="secondary" use:tooltip={'Finish this task and save it to history.'} onclick={() => act('stop')} disabled={busy}>{@render icon('stop', 22)} Stop</button>
         {/if}
       </div>
       <div class="timer-meta">{#if active}<span>Started {time(active.startedAt)} <span class="meta-date">· {date(active.startedAt)}</span></span>{/if}</div>
     </section>
 
     <section class="history" aria-label="Task history">
-      <div class="history-heading"><h2>History <span class="count">{completed.length}</span></h2><div class="history-tools"><label class="export import-button" title="Import JSON">Import<input aria-label="Import JSON" type="file" accept=".json,application/json" onchange={selectImport} disabled={busy || (!ready && !browserMode)}/></label><button class="export" title="Export JSON" onclick={exportHistory} disabled={busy}>{@render icon('download', 17)} Export</button></div></div>
+      <div class="history-heading"><h2>History <span class="count">{completed.length}</span></h2><div class="history-tools"><label class="export import-button" use:tooltip={'Restore a JSON backup. Review it before replacing your history.'}>Import<input aria-label="Import JSON" type="file" accept=".json,application/json" onchange={selectImport} disabled={busy || (!ready && !browserMode)}/></label><button class="export" use:tooltip={'Download your history as a JSON backup.'} onclick={exportHistory} disabled={busy}>{@render icon('download', 17)} Export</button></div></div>
       {#if pendingImport}
         <div class="import-preview" role="region" aria-label="Confirm history import">
           <h3>Replace your history?</h3>
@@ -164,12 +171,12 @@
         <div class="search">{@render icon('search', 17)}<input aria-label="Search task history" placeholder="Find a task…" bind:value={search}/></div>
         <div class="table-wrap"><table><thead><tr><th>Task</th><th>Date & start</th><th>Stopped</th><th class="elapsed-col">Elapsed</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
           {#each filtered as entry (entry.id)}
-            <tr><td class="task-cell">
+            <tr class:just-saved={entry.id === lastSaved}><td class="task-cell">
               {#if editing === entry.id}<form class="edit-form" onsubmit={(event) => { event.preventDefault(); void act('rename', { id: entry.id, label: editLabel }); }}><input aria-label="New task label" bind:value={editLabel} maxlength="160"/><button class="small-button" disabled={busy || !editLabel.trim()}>Save</button><button class="text-button" type="button" onclick={() => { editing = null; }}>Cancel</button></form>
               {:else}<strong>{entry.label}</strong><details><summary>{entry.segments.length} work {entry.segments.length === 1 ? 'interval' : 'intervals'}</summary>{#each entry.segments as segment}<p>{date(segment.startedAt)} · {time(segment.startedAt)} → {date(segment.stoppedAt!)} · {time(segment.stoppedAt!)}</p>{/each}</details>{/if}
             </td><td><span>{date(entry.startedAt)}</span><small>{time(entry.startedAt)}</small></td><td><span>{date(entry.stoppedAt!)}</span><small>{time(entry.stoppedAt!)}</small></td><td class="elapsed-col"><span class="duration">{duration(entry.elapsedMs)}</span></td><td class="row-actions">
               {#if deleting === entry.id}<div class="delete-confirm"><span>Delete this task?</span><button class="danger" disabled={busy} onclick={() => act('delete', { id: entry.id })}>Delete</button><button class="text-button" onclick={() => { deleting = null; }}>Cancel</button></div>
-              {:else}<button class="icon-button" aria-label={`Rename ${entry.label}`} title="Rename task" disabled={busy} onclick={() => { editing = entry.id; editLabel = entry.label; deleting = null; }}>{@render icon('edit', 16)}</button><button class="icon-button" aria-label={`Delete ${entry.label}`} title="Delete task" disabled={busy} onclick={() => { deleting = entry.id; editing = null; }}>{@render icon('trash', 16)}</button>{/if}
+              {:else}<button class="icon-button" aria-label={`Rename ${entry.label}`} use:tooltip={'Rename task'} disabled={busy} onclick={() => { editing = entry.id; editLabel = entry.label; deleting = null; }}>{@render icon('edit', 16)}</button><button class="icon-button" aria-label={`Delete ${entry.label}`} use:tooltip={'Delete task — confirmation required'} disabled={busy} onclick={() => { deleting = entry.id; editing = null; }}>{@render icon('trash', 16)}</button>{/if}
             </td></tr>
           {/each}
         </tbody></table>{#if !filtered.length}<p class="no-results">No tasks match “{search}”.</p>{/if}</div>
@@ -177,7 +184,7 @@
         <div class="empty">{@render icon('watch', 22)}<p>No sessions yet.</p></div>
       {/if}
     </section>
-    <footer><span>{browserMode ? 'Stored in this browser' : 'Stored in your local JSON file'} <span aria-hidden="true">·</span> <a href="/privacy">Privacy</a></span></footer>
+    <Footer />
   </main>
 </div>
 
@@ -271,9 +278,17 @@
   .no-results { padding: 15px; text-align: center; color: #78826e; font-size: 12px; }
   .error { background: #fff0eb; color: #8a4b3c; border: 1px solid #eacabc; border-radius: 12px; padding: 15px 18px; margin-bottom: 18px; display: flex; align-items: center; gap: 15px; justify-content: space-between; font-size: 12px; }
   .error button { background: transparent; color: inherit; border: 1px solid #c89181; border-radius: 6px; padding: 7px 11px; white-space: nowrap; }
-  footer { display: flex; justify-content: center; padding: 23px 0 30px; font-size: 11px; color: #89967f; }
-  footer span>span { margin: 0 7px; }
-  footer a:hover { color: #3f6345; text-decoration: underline; }
+  .start-trigger{display:inline-flex;border-radius:14px}.start-trigger:focus-visible{outline:3px solid #74a084;outline-offset:4px}.start-trigger button:disabled{pointer-events:none}
+  :global(.tippy-box[data-theme~='taskwatch']){background:#243e2e;color:#f6faef;border-radius:9px;font:12px/1.5 -apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 5px 20px #243c3020}
+  :global(.tippy-box[data-theme~='taskwatch'] .tippy-content){padding:9px 12px}
+  :global(.tippy-box[data-theme~='taskwatch'] .tippy-arrow){color:#243e2e}
+  .digits.running .colon{animation:clock-pulse 1.8s ease-in-out infinite}.status.running>span{animation:status-pulse 2.8s ease-in-out infinite}
+  .just-saved{animation:saved-flash 1.4s ease-out both}.primary:hover:not(:disabled),.secondary:hover:not(:disabled){transform:translateY(-2px)}
+  @keyframes clock-pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  @keyframes status-pulse{0%,100%{box-shadow:0 0 0 3px #ecf3e6}50%{box-shadow:0 0 0 7px #ecf3e600}}
+  @keyframes saved-flash{from{background:#e4f0d9}to{background:transparent}}
+  .brand:hover .brand-mark,.brand:focus-visible .brand-mark{animation:wind-up .65s ease-in-out}
+  @keyframes wind-up{0%,100%{transform:rotate(0)}25%{transform:rotate(-12deg)}55%{transform:rotate(8deg)}80%{transform:rotate(-3deg)}}
   .sr-only { position: absolute; top: 0; left: 0; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); clip-path: inset(50%); white-space: nowrap; border: 0; }
   @media(max-width: 650px) {
     .shell { padding: 0 18px; }
@@ -289,6 +304,7 @@
     .label-row input { font-size: 18px; padding: 12px 4px; }
     .digits { font-size: clamp(48px, 16vw, 86px); letter-spacing: -.035em; margin: 32px 0; }
     .controls { gap: 10px; }
+    .start-trigger{flex:1;max-width:210px}.start-trigger>.primary{width:100%}
     .primary, .secondary { min-width: 0; flex: 1; max-width: 210px; height: 58px; font-size: 16px; border-radius: 12px; gap: 9px; }
     .timer-meta { font-size: 10px; min-height: 36px; }
     .history { margin-top: 27px; }
@@ -299,5 +315,5 @@
     th, td { padding: 14px; }
     .error { align-items: flex-start; flex-direction: column; }
   }
-  @media(prefers-reduced-motion: reduce) { :global(button), :global(a), :global(input) { transition: none; } }
+  @media(prefers-reduced-motion: reduce) { :global(button), :global(a), :global(input) { transition: none; } .digits.running .colon,.status.running>span,.just-saved,.brand:hover .brand-mark,.brand:focus-visible .brand-mark{animation:none}.primary:hover:not(:disabled),.secondary:hover:not(:disabled){transform:none} }
 </style>

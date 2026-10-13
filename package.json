@@ -9,8 +9,9 @@
   "scripts": {
     "dev": "vite dev",
     "dev:browser": "node scripts/vite.mjs browser dev",
-    "build": "node scripts/vite.mjs browser build && node scripts/verify-public.mjs",
-    "build:node": "node scripts/vite.mjs file build",
+    "facts": "node scripts/facts.mjs",
+    "build": "npm run facts && node scripts/vite.mjs browser build && node scripts/verify-public.mjs",
+    "build:node": "npm run facts && node scripts/vite.mjs file build",
     "preview": "node scripts/vite.mjs browser preview --host 127.0.0.1 --port 5212 --strictPort",
     "ship": "npm run build && wrangler deploy",
     "start": "node scripts/start.mjs",
@@ -28,11 +29,16 @@
     "@sveltejs/kit": "^3.0.1",
     "@sveltejs/vite-plugin-svelte": "^7.3.1",
     "@types/node": "^26.6.5",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "svelte": "^5.57.2",
     "svelte-check": "^4.7.6",
     "typescript": "^6.0.3",
     "vite": "^8.3.4",
     "vitest": "^5.0.4",
     "wrangler": "^4.150.0"
+  },
+  "dependencies": {
+    "tippy.js": "^6.3.7"
   }
 }
