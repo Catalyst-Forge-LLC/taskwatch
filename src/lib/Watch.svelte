@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import { activeEntry, duration, elapsed, todayElapsed, type Action, type WatchState } from '#lib/timer.ts';
-  import { browserMode, getStorage } from '#lib/storage/index.ts';
-  import { validate, StoreError } from '#lib/engine.ts';
+import { browserMode, browserStorage, getStorage } from '#lib/storage/index.ts';
+import { validate, StoreError } from '#lib/engine.ts';
   import type { Storage } from '#lib/storage/types.ts';
   import Footer from '#lib/Footer.svelte';
   import { tooltip } from '#lib/tooltip.ts';
@@ -11,7 +11,8 @@
   let pendingImport = $state<{ name: string; state: WatchState } | null>(null);
 
   let watch = $state<WatchState>({ version: 1, revision: 0, entries: [] });
-  let ready = $state(false);
+  // The public page has no server round trip. Prerender the idle stopwatch, then read this browser's history on mount.
+  let ready = $state(browserMode);
   let busy = $state(false);
   let message = $state('');
   let label = $state('');
@@ -42,7 +43,10 @@
     try {
       storage ??= await getStorage();
       apply(await storage.read(), reset);
-    } catch (error) { message = error instanceof Error ? error.message : 'Could not read your history.'; }
+    } catch (error) {
+      message = error instanceof Error ? error.message : 'Could not read your history.';
+      if (browserMode) ready = false;
+    }
   }
 
   async function act(action: Action, extra: { label?: string; id?: string; data?: WatchState } = {}) {
@@ -94,6 +98,14 @@
   onMount(() => {
     let disposed = false;
     let unsubscribe = () => {};
+    if (browserMode) {
+      // Keep the browser store in this bundle so the first read does not wait on another chunk.
+      try { storage = browserStorage(); }
+      catch (error) {
+        message = error instanceof Error ? error.message : 'Could not read your history.';
+        ready = false;
+      }
+    }
     void refresh().then(() => { if (!disposed && storage) unsubscribe = storage.subscribe(() => { void refresh(true); }); });
     const tick = setInterval(() => { now = Date.now() + offset; }, 200);
     const poll = setInterval(() => { if (!busy) void refresh(); }, 5000);
@@ -105,7 +117,9 @@
 
 <svelte:head>
   <title>{active ? `${duration(elapsed(active, now))} · Taskwatch` : 'Taskwatch · Make time visible'}</title>
-  <meta name="description" content="A simple local task stopwatch. Track your work, keep your time." />
+  <meta name="description" content={browserMode
+    ? 'A private task stopwatch. Your history stays in this browser.'
+    : 'A simple local task stopwatch. Track your work, keep your time.'} />
 </svelte:head>
 
 {#snippet icon(kind: string, size = 20)}
@@ -136,7 +150,7 @@
     {/if}
 
     <section class="timer-card" aria-label="Task stopwatch">
-      <div class="timer-top"><span class:running class:paused={active && !running} class="status" aria-live="polite"><span></span>{busy ? 'Saving' : !ready ? 'Loading' : running ? 'Running' : active ? 'Paused' : 'Ready'}</span></div>
+      <div class="timer-top"><span class:running class:paused={active && !running} class="status" aria-live="polite"><span></span>{busy ? 'Saving' : !ready && !browserMode ? 'Loading' : running ? 'Running' : active ? 'Paused' : 'Ready'}</span></div>
       <form class="label-form" onsubmit={(event) => { event.preventDefault(); if (active) void act('rename', { id: active.id, label }); else void act('start', { label }); }}>
         <label class="sr-only" for="task-label">Task name</label>
         <div class="label-row"><input id="task-label" bind:value={label} maxlength="160" placeholder="What are you working on?" autocomplete="off" disabled={busy || !ready} />{#if active && label.trim() !== active.label}<button class="small-button" disabled={busy || !label.trim()} type="submit">Save</button>{/if}</div>
