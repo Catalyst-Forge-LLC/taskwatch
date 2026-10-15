@@ -5,8 +5,9 @@
   "version": "0.1.0",
   "type": "web app (SPA) with optional local Node server",
   "status": "active",
-  "license": "UNKNOWN",
+  "license": "MIT",
   "homepage": "https://taskwatch.dev",
+  "repository": "https://github.com/Catalyst-Forge-LLC/taskwatch",
   "stack": {
     "language": "TypeScript",
     "runtime": "Browser; Node.js in local file mode",
@@ -86,6 +87,6 @@ Public browser-only stopwatch with an optional local file-backed Node build.
 | build | Vite |
 | tooltips | TippyJS |
 
-The source license has not been declared. This label is assistant-authored at the owner's request, not an independent review.
+Source is MIT. This label is assistant-authored at the owner's request, not an independent review.
 
 [Open AppFacts viewer](https://taskwatch.dev/facts/app) · [Taskwatch](https://taskwatch.dev)

@@ -147,7 +147,7 @@ The footer links to Catalyst Forge's tool shelf, an AppFacts viewer, and the
 standalone FeatureFacts label. `APP_FACTS.md` and `FEATURE_FACTS.md` own these
 declarations; `npm run facts` checks their schemas and fingerprint and generates
 the public JSON/Markdown copies and viewer data. These are assistant-authored
-declarations, not an independent audit. No source license has been declared.
+declarations, not an independent audit. Source is MIT.
 
 TippyJS hints explain the disabled Start button and supporting controls. The
 running timer has a subtle CSS pulse and newly finished tasks briefly highlight.
