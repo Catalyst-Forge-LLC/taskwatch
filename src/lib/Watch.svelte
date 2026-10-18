@@ -144,6 +144,7 @@ import { validate, StoreError } from '#lib/engine.ts';
 
   <main>
     <h1 class="sr-only">Task stopwatch</h1>
+    <p class="task-intro">Name a task, time the work, and keep a dated record.</p>
 
     {#if message}
       <div class="error" role="alert"><span>{message}</span><button onclick={() => { message = ''; void refresh(true); }}>Retry</button></div>
@@ -221,6 +222,7 @@ import { validate, StoreError } from '#lib/engine.ts';
   .today>span { font-size: 12px; }
   .today strong { color: #36533e; font-size: 18px; font-weight: 550; font-variant-numeric: tabular-nums; letter-spacing: -.4px; }
   main { padding-top: 18px; }
+  .task-intro { margin: 0 0 1.25rem; color: #526650; font-size: .9375rem; line-height: 1.6; text-align: center; }
   .timer-card { background: #fff; border: 1px solid #e0e6dc; border-radius: 28px; box-shadow: 0 12px 45px #243c3007, 0 2px 4px #243c3003; padding: 30px 36px 24px; }
   .timer-top { display: flex; justify-content: center; min-height: 26px; }
   .status { display: inline-flex; align-items: center; gap: 7px; color: #6c7d6b; font-size: 12px; font-weight: 500; }
