@@ -34,6 +34,9 @@ including numbered repeats and the current timer. The week starts at local
 midnight on Monday. Expand a total to see the sessions and timestamps behind it;
 for sessions spanning the boundary, only work inside this week counts.
 
+On phones, History shows a card for each session with its name, working time,
+and **Start again**. Open **Details** for exact start/stop times and intervals.
+
 ## Run it yourself
 
 Requires Node.js 22.17 or newer.

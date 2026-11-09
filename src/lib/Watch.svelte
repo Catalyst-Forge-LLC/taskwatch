@@ -240,8 +240,14 @@ import { validate, StoreError } from '#lib/engine.ts';
           {#each filtered as entry (entry.id)}
             <tr class:just-saved={entry.id === lastSaved}><td class="task-cell">
               {#if editing === entry.id}<form class="edit-form" onsubmit={(event) => { event.preventDefault(); void act('rename', { id: entry.id, label: editLabel }); }}><input aria-label="New task label" bind:value={editLabel} maxlength="160"/><button class="small-button" disabled={busy || !editLabel.trim()}>Save</button><button class="text-button" type="button" onclick={() => { editing = null; }}>Cancel</button></form>
-              {:else}<strong>{entry.label}</strong><details><summary>{entry.segments.length} work {entry.segments.length === 1 ? 'interval' : 'intervals'}</summary>{#each entry.segments as segment}<p>{date(segment.startedAt)} · {time(segment.startedAt)} → {date(segment.stoppedAt!)} · {time(segment.stoppedAt!)}</p>{/each}</details>{/if}
-            </td><td><span>{date(entry.startedAt)}</span><small>{time(entry.startedAt)}</small></td><td><span>{date(entry.stoppedAt!)}</span><small>{time(entry.stoppedAt!)}</small></td><td class="elapsed-col"><span class="duration">{duration(entry.elapsedMs)}</span></td><td class="row-actions">
+              {:else}
+                <strong>{entry.label}</strong>
+                <details><summary><span class="phone-only">{date(entry.startedAt)} · Details</span><span class="desktop-only">{entry.segments.length} work {entry.segments.length === 1 ? 'interval' : 'intervals'}</span></summary>
+                  <div class="phone-only"><p>Started: {date(entry.startedAt)} · {time(entry.startedAt)}</p><p>Stopped: {date(entry.stoppedAt!)} · {time(entry.stoppedAt!)}</p><b>Work intervals</b></div>
+                  {#each entry.segments as segment}<p>{date(segment.startedAt)} · {time(segment.startedAt)} → {date(segment.stoppedAt!)} · {time(segment.stoppedAt!)}</p>{/each}
+                </details>
+              {/if}
+            </td><td class="stamp-cell"><span>{date(entry.startedAt)}</span><small>{time(entry.startedAt)}</small></td><td class="stamp-cell"><span>{date(entry.stoppedAt!)}</span><small>{time(entry.stoppedAt!)}</small></td><td class="elapsed-col"><span class="duration">{duration(entry.elapsedMs)}</span></td><td class="row-actions">
               {#if deleting === entry.id}<div class="delete-confirm"><span>Delete this task?</span><button class="danger" disabled={busy} onclick={() => act('delete', { id: entry.id })}>Delete</button><button class="text-button" onclick={() => { deleting = null; }}>Cancel</button></div>
               {:else}
                 <!-- Keep the reason accessible while Start again is disabled. -->
@@ -333,6 +339,7 @@ import { validate, StoreError } from '#lib/engine.ts';
   .search input { border: 0; border-bottom: 1px solid #dce4d4; border-radius: 0; background: transparent; padding: 9px 0; width: 220px; color: #3f5135; font-size: 12px; }
   .search input:focus-visible { outline: 0; border-color: #497754; }
   .table-wrap { overflow-x: auto; border: 1px solid #e0e6d9; border-radius: 16px; background: #fff; }
+  .phone-only { display:none; }
   table { border-collapse: collapse; width: 100%; text-align: left; }
   th { color: #78876c; background: #f5f7f0; font-size: 11px; padding: 15px 18px; font-weight: 500; }
   td { padding: 18px; border-top: 1px solid #edf0e7; font-size: 12px; vertical-align: top; white-space: nowrap; color: #52624a; }
@@ -395,7 +402,25 @@ import { validate, StoreError } from '#lib/engine.ts';
     .history-heading h2 { font-size: 17px; }
     .export { padding: 0 9px; }
     .empty { padding: 26px 15px; }
-    th, td { padding: 14px; }
+    .table-wrap { overflow:visible; background:transparent; border:0; }
+    table, tbody { display:block; }
+    thead, .stamp-cell, .desktop-only { display:none; }
+    tbody { display:grid; gap:10px; }
+    tbody tr { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 10px; border:1px solid #dce5d6; border-radius:14px; background:white; padding:14px; }
+    td, td.task-cell, td.row-actions { border:0; min-width:0; max-width:none; padding:0; }
+    td.task-cell { grid-column:1; }
+    td.elapsed-col { grid-column:2; }
+    .phone-only { display:initial; }
+    div.phone-only { display:block; }
+    .duration { font-size:15px; }
+    summary { padding:9px 0; font-size:12px; }
+    details { margin-top:0; }
+    details p { font-size:12px; }
+    .row-actions { grid-column:1 / -1; display:flex; align-items:center; gap:4px; }
+    .repeat-trigger { margin-right:auto; }
+    .repeat-button, .icon-button { min-height:44px; min-width:44px; }
+    .repeat-button { font-size:12px; padding:6px 12px; }
+    .delete-confirm { width:100%; }
     .error { align-items: flex-start; flex-direction: column; }
   }
   @media(prefers-reduced-motion: reduce) { :global(button), :global(a), :global(input) { transition: none; } .digits.running .colon,.status.running>span,.just-saved,.brand:hover .brand-mark,.brand:focus-visible .brand-mark{animation:none}.primary:hover:not(:disabled),.secondary:hover:not(:disabled){transform:none} }
