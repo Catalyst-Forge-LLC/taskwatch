@@ -23,12 +23,18 @@ suffix is treated as a session number. Long names are shortened just enough to
 keep the new label within 160 characters. The original session and timestamps
 stay intact. Stop the current timer before starting another session.
 
-## Run it yourself
+With the timer idle, focus the task name field to start one of your five most
+recent distinct tasks in one click. Type to narrow the choices, or enter a new
+name and press Enter as usual. Use Tab or the arrow keys to reach a suggestion.
+
+## Weekly totals
 
 Under History, choose **This week** to see working time grouped by task name,
 including numbered repeats and the current timer. The week starts at local
 midnight on Monday. Expand a total to see the sessions and timestamps behind it;
 for sessions spanning the boundary, only work inside this week counts.
+
+## Run it yourself
 
 Requires Node.js 22.17 or newer.
 

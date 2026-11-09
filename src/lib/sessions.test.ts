@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest';
 import { sessionFamilies, weeklyGroups, weekStart } from './sessions';
+import { recentStarts } from './recent';
 import type { Entry } from './timer';
 
 const monday = new Date(2026, 10, 9, 0, 0, 0).getTime();
@@ -21,4 +22,11 @@ it('recovers the original task name across a suffix growing from one to two digi
   const root = 'W'.repeat(160);
   const names = [root, root.slice(0, 157) + ' #9', root.slice(0, 156) + ' #10'];
   expect([...sessionFamilies(names.map(n => entry(n, [[1, 2]]))).values()]).toEqual([root, root, root]);
+});
+it('suggests a distinct family by its latest finish, including when import order differs', () => {
+  const entries = [entry('Writing', [[1, 3]]), entry('Walk', [[20, 30]]),
+    entry('Writing #4', [[7, 8]]), entry('Waiting', [[35, null]])];
+  const families = sessionFamilies(entries);
+  expect(recentStarts(entries, families, '').map(x => x.label)).toEqual(['Walk #2', 'Writing #5']);
+  expect(recentStarts(entries, families, 'WRIT')).toEqual([{ id: 'Writing #4', label: 'Writing #5' }]);
 });

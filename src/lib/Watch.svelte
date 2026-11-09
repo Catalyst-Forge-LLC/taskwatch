@@ -8,6 +8,7 @@ import { validate, StoreError } from '#lib/engine.ts';
   import StopAt from '#lib/StopAt.svelte';
   import Weekly from '#lib/Weekly.svelte';
   import { sessionFamilies } from '#lib/sessions.ts';
+  import { recentStarts } from '#lib/recent.ts';
   import { tooltip } from '#lib/tooltip.ts';
 
   let storage: Storage | undefined;
@@ -20,6 +21,9 @@ import { validate, StoreError } from '#lib/engine.ts';
   let busy = $state(false);
   let message = $state('');
   let label = $state('');
+  let recentOpen = $state(false);
+  let nameField = $state<HTMLInputElement>();
+  let suggestions = $state<HTMLDivElement>();
   let search = $state('');
   let historyView = $state<'sessions' | 'week'>('sessions');
   const families = $derived(sessionFamilies(watch.entries));
@@ -30,6 +34,23 @@ import { validate, StoreError } from '#lib/engine.ts';
   let deleting = $state<string | null>(null);
   let lastSaved = $state<string | null>(null);
   const active = $derived(activeEntry(watch));
+  const recent = $derived(recentOpen && !active ? recentStarts(watch.entries, families, label) : []);
+
+  async function nextSuggestion(event: KeyboardEvent) {
+    if (active) return;
+    if (event.key === 'Escape') { recentOpen = false; return; }
+    if (event.key !== 'ArrowDown') return;
+    recentOpen = true; await tick();
+    suggestions?.querySelector('button')?.focus();
+  }
+  function navigateRecent(event: KeyboardEvent, index: number) {
+    if (event.key === 'Escape') { nameField?.focus(); recentOpen = false; }
+    else if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      const next = index + (event.key === 'ArrowDown' ? 1 : -1);
+      if (next < 0) nameField?.focus(); else suggestions?.querySelectorAll('button')[Math.min(next, recent.length - 1)]?.focus();
+    }
+  }
   const running = $derived(active?.segments.at(-1)?.stoppedAt === null);
   const completed = $derived(watch.entries.filter((entry) => entry.stoppedAt !== null));
   const filtered = $derived(completed.filter((entry) => entry.label.toLowerCase().includes(search.toLowerCase())));
@@ -163,9 +184,20 @@ import { validate, StoreError } from '#lib/engine.ts';
 
     <section class="timer-card" aria-label="Task stopwatch" tabindex="-1" bind:this={timerCard}>
       <div class="timer-top"><span class:running class:paused={active && !running} class="status" aria-live="polite"><span></span>{busy ? 'Saving' : !ready && !browserMode ? 'Loading' : running ? 'Running' : active ? 'Paused' : 'Ready'}</span></div>
-      <form class="label-form" onsubmit={(event) => { event.preventDefault(); if (active) void act('rename', { id: active.id, label }); else void act('start', { label }); }}>
+      <form class="label-form" onfocusout={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) recentOpen = false; }} onsubmit={(event) => { event.preventDefault(); if (active) void act('rename', { id: active.id, label }); else void act('start', { label }); }}>
         <label class="sr-only" for="task-label">Task name</label>
-        <div class="label-row"><input id="task-label" bind:value={label} maxlength="160" placeholder="What are you working on?" autocomplete="off" disabled={busy || !ready} />{#if active && label.trim() !== active.label}<button class="small-button" disabled={busy || !label.trim()} type="submit">Save</button>{/if}</div>
+        <div class="label-row"><input id="task-label" bind:this={nameField} bind:value={label} onfocus={() => recentOpen = true} onclick={() => recentOpen = true} oninput={() => recentOpen = true} onkeydown={nextSuggestion} maxlength="160" placeholder="What are you working on?" autocomplete="off" disabled={busy || !ready} />{#if active && label.trim() !== active.label}<button class="small-button" disabled={busy || !label.trim()} type="submit">Save</button>{/if}</div>
+        {#if recent.length}
+          <div class="recent" bind:this={suggestions} role="group" aria-label="Start a recent task">
+            <span>Start a recent task</span>
+            {#each recent as choice, i (choice.id)}
+              <button type="button" disabled={busy || !ready} onpointerdown={e => { if (e.pointerType === 'mouse') e.preventDefault(); }}
+                onkeydown={e => navigateRecent(e, i)} onclick={() => { recentOpen = false; void act('repeat', { id: choice.id }); }}>
+                {@render icon('play', 15)} Start {choice.label}
+              </button>
+            {/each}
+          </div>
+        {/if}
       </form>
       <div class="digits" class:muted={active && !running} class:running role="timer" aria-label="Elapsed working time">{#each (active ? duration(elapsed(active, now)) : '00:00:00').split(':') as part, index}{#if index}<span class="colon">:</span>{/if}<span>{part}</span>{/each}</div>
       <div class="controls">
@@ -255,7 +287,10 @@ import { validate, StoreError } from '#lib/engine.ts';
   .status.running>span { background: #558654; box-shadow: 0 0 0 4px #ecf3e6; }
   .status.paused { color: #9a762e; }
   .status.paused>span { background: #c09b52; }
-  .label-form { max-width: 500px; margin: 20px auto 0; }
+  .label-form { position:relative; max-width: 500px; margin: 20px auto 0; }
+  .recent{position:absolute;z-index:2;inset:100% 0 auto;display:grid;gap:2px;padding:8px;background:white;border:1px solid #d1dec8;border-radius:12px;box-shadow:0 8px 24px #243c3019;text-align:left}
+  .recent>span{padding:3px 9px;color:#5d7157;font-size:12px}.recent button{display:flex;align-items:center;gap:8px;text-align:left;overflow-wrap:anywhere;border:0;border-radius:6px;background:white;color:#34563d;padding:10px;font-size:14px}
+  .recent button:hover,.recent button:focus-visible{background:#eff5e9}.recent button svg{flex:none}
   .label-row { display: flex; align-items: center; gap: 10px; }
   .label-row input { width: 100%; min-width: 0; text-align: center; border: 1px solid transparent; border-bottom-color: #e4e9e0; border-radius: 10px 10px 0 0; color: #314c39; background: transparent; font-size: 23px; font-weight: 450; padding: 13px 16px 15px; }
   .label-row input::placeholder { color: #899789; font-weight: 400; }
