@@ -17,6 +17,23 @@ function fixture() {
 }
 
 describe('browser history', () => {
+  it('persists a fresh numbered session and rejects a competing tab repeating the same history', async () => {
+    const f = fixture();
+    const first = await f.store.mutate({ action: 'start', label: 'Writing', revision: 0 });
+    await f.store.mutate({ action: 'stop', revision: 1 });
+    f.advance(86_400_000);
+    const other = createBrowserStorage(f.disk, f.locks, f.clock);
+    const results = await Promise.allSettled([
+      f.store.mutate({ action: 'repeat', id: first.state.entries[0].id, revision: 2 }),
+      other.mutate({ action: 'repeat', id: first.state.entries[0].id, revision: 2 })
+    ]);
+    expect(results.map(r => r.status)).toEqual(['fulfilled', 'rejected']);
+    const restored = (await other.read()).state;
+    expect(restored.entries.map(e => e.label)).toEqual(['Writing #2', 'Writing']);
+    expect(elapsed(restored.entries[0], f.clock())).toBe(0);
+    expect(restored.entries[0].stoppedAt).toBeNull();
+  });
+
   it('restores a running timer and excludes pauses using the shared rules', async () => {
     const f = fixture();
     await f.store.mutate({ action: 'start', label: 'Browser task', revision: 0 });

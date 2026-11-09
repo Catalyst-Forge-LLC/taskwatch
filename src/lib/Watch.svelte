@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { activeEntry, duration, elapsed, todayElapsed, type Action, type WatchState } from '#lib/timer.ts';
 import { browserMode, browserStorage, getStorage } from '#lib/storage/index.ts';
 import { validate, StoreError } from '#lib/engine.ts';
@@ -8,6 +8,7 @@ import { validate, StoreError } from '#lib/engine.ts';
   import { tooltip } from '#lib/tooltip.ts';
 
   let storage: Storage | undefined;
+  let timerCard: HTMLElement;
   let pendingImport = $state<{ name: string; state: WatchState } | null>(null);
 
   let watch = $state<WatchState>({ version: 1, revision: 0, entries: [] });
@@ -60,6 +61,11 @@ import { validate, StoreError } from '#lib/engine.ts';
       editing = null;
       deleting = null;
       pendingImport = null;
+      if (action === 'repeat') {
+        await tick();
+        timerCard.focus({ preventScroll: true });
+        timerCard.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+      }
     } catch (error) {
       if (error instanceof StoreError && error.status === 409) await refresh(true);
       message = error instanceof Error ? error.message : 'Could not save. Please try again.';
@@ -150,7 +156,7 @@ import { validate, StoreError } from '#lib/engine.ts';
       <div class="error" role="alert"><span>{message}</span><button onclick={() => { message = ''; void refresh(true); }}>Retry</button></div>
     {/if}
 
-    <section class="timer-card" aria-label="Task stopwatch">
+    <section class="timer-card" aria-label="Task stopwatch" tabindex="-1" bind:this={timerCard}>
       <div class="timer-top"><span class:running class:paused={active && !running} class="status" aria-live="polite"><span></span>{busy ? 'Saving' : !ready && !browserMode ? 'Loading' : running ? 'Running' : active ? 'Paused' : 'Ready'}</span></div>
       <form class="label-form" onsubmit={(event) => { event.preventDefault(); if (active) void act('rename', { id: active.id, label }); else void act('start', { label }); }}>
         <label class="sr-only" for="task-label">Task name</label>
@@ -191,7 +197,11 @@ import { validate, StoreError } from '#lib/engine.ts';
               {:else}<strong>{entry.label}</strong><details><summary>{entry.segments.length} work {entry.segments.length === 1 ? 'interval' : 'intervals'}</summary>{#each entry.segments as segment}<p>{date(segment.startedAt)} · {time(segment.startedAt)} → {date(segment.stoppedAt!)} · {time(segment.stoppedAt!)}</p>{/each}</details>{/if}
             </td><td><span>{date(entry.startedAt)}</span><small>{time(entry.startedAt)}</small></td><td><span>{date(entry.stoppedAt!)}</span><small>{time(entry.stoppedAt!)}</small></td><td class="elapsed-col"><span class="duration">{duration(entry.elapsedMs)}</span></td><td class="row-actions">
               {#if deleting === entry.id}<div class="delete-confirm"><span>Delete this task?</span><button class="danger" disabled={busy} onclick={() => act('delete', { id: entry.id })}>Delete</button><button class="text-button" onclick={() => { deleting = null; }}>Cancel</button></div>
-              {:else}<button class="icon-button" aria-label={`Rename ${entry.label}`} use:tooltip={'Rename task'} disabled={busy} onclick={() => { editing = entry.id; editLabel = entry.label; deleting = null; }}>{@render icon('edit', 16)}</button><button class="icon-button" aria-label={`Delete ${entry.label}`} use:tooltip={'Delete task — confirmation required'} disabled={busy} onclick={() => { deleting = entry.id; editing = null; }}>{@render icon('trash', 16)}</button>{/if}
+              {:else}
+                <!-- Keep the reason accessible while Start again is disabled. -->
+                <!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+                <span class="repeat-trigger" role="group" aria-label={`Repeat ${entry.label}`} tabindex={active && !busy ? 0 : -1} use:tooltip={active ? 'Stop the current task before starting another session.' : 'Start a new session now with the next number, such as Writing #2. The original stays in history.'}><button class="repeat-button" aria-label={`Start again: ${entry.label}`} disabled={busy || !ready || !!active} onclick={() => act('repeat', { id: entry.id })}>{@render icon('play', 14)} Start again</button></span>
+                <button class="icon-button" aria-label={`Rename ${entry.label}`} use:tooltip={'Rename task'} disabled={busy} onclick={() => { editing = entry.id; editLabel = entry.label; deleting = null; }}>{@render icon('edit', 16)}</button><button class="icon-button" aria-label={`Delete ${entry.label}`} use:tooltip={'Delete task — confirmation required'} disabled={busy} onclick={() => { deleting = entry.id; editing = null; }}>{@render icon('trash', 16)}</button>{/if}
             </td></tr>
           {/each}
         </tbody></table>{#if !filtered.length}<p class="no-results">No tasks match “{search}”.</p>{/if}</div>
@@ -280,6 +290,11 @@ import { validate, StoreError } from '#lib/engine.ts';
   .elapsed-col { text-align: right; }
   .duration { font-size: 17px; font-weight: 550; font-variant-numeric: tabular-nums; color: #365b3c; }
   .row-actions { text-align: right; max-width: 200px; }
+  .repeat-trigger { display: inline-flex; border-radius: 7px; vertical-align: middle; }
+  .repeat-trigger:focus-visible { outline: 3px solid #74a084; outline-offset: 3px; }
+  .repeat-button { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; padding: 6px 9px; margin-right: 4px; border: 1px solid #dce5d6; border-radius: 7px; background: #f4f7ef; color: #3e5c42; font-size: 11px; white-space: nowrap; }
+  .repeat-button:hover:not(:disabled) { background: #eaf0e3; border-color: #cad9c0; }
+  .repeat-button:disabled { pointer-events: none; }
   .icon-button { border: 0; background: transparent; color: #819175; border-radius: 7px; padding: 6px; min-width: 32px; min-height: 32px; }
   .icon-button:hover { color: #29583d; background: #f0f5e9; }
   details { margin-top: 7px; color: #7b8b6e; font-size: 10px; }

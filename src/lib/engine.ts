@@ -41,6 +41,27 @@ export function validate(value: unknown): WatchState {
 
 export type Mutation = { action?: unknown; revision?: unknown; label?: unknown; id?: unknown; data?: unknown };
 
+// Resolve numbering inside the storage transaction, including when an older
+// entry is chosen or multiple tabs try to start another session.
+export function nextSessionLabel(source: string, entries: Entry[]): string {
+  const numbered = /^(.*\S) #(\d+)$/;
+  const base = source.match(numbered)?.[1] ?? source;
+  let highest = 1n;
+  for (const entry of entries) {
+    const match = entry.label.match(numbered);
+    if (!match) continue;
+    const suffix = ` #${match[2]}`;
+    if (match[1] === base.slice(0, 160 - suffix.length).trimEnd()) {
+      const number = BigInt(match[2]);
+      if (number > highest) highest = number;
+    }
+  }
+  const suffix = ` #${highest + 1n}`;
+  const stem = base.slice(0, 160 - suffix.length).trimEnd();
+  if (!stem) throw new StoreError('Session number is too long. Rename this task before starting it again.');
+  return stem + suffix;
+}
+
 export function transition(current: WatchState, input: Mutation, now = Date.now(), uuid = () => crypto.randomUUID()): WatchState {
   // Timer documents are JSON values. JSON cloning also accepts reactive UI
   // proxies, which structuredClone rejects even when their contents are valid.
@@ -67,9 +88,15 @@ export function transition(current: WatchState, input: Mutation, now = Date.now(
         try { imported = validate(input.data); }
         catch (error) { throw new StoreError(error instanceof Error ? error.message : 'Invalid import.'); }
         state.entries = JSON.parse(JSON.stringify(imported.entries));
-      } else if (action === 'start') {
+      } else if (action === 'start' || action === 'repeat') {
         if (active) throw new StoreError('Stop the current task before starting another.', 409);
-        state.entries.unshift({ id: uuid(), label: label(), startedAt: stamp, stoppedAt: null,
+        let nextLabel: string;
+        if (action === 'repeat') {
+          const source = state.entries.find((entry) => entry.id === input.id);
+          if (!source) throw new StoreError('Task not found.', 404);
+          nextLabel = nextSessionLabel(source.label, state.entries);
+        } else nextLabel = label();
+        state.entries.unshift({ id: uuid(), label: nextLabel, startedAt: stamp, stoppedAt: null,
           elapsedMs: 0, segments: [{ startedAt: stamp, stoppedAt: null }] });
       } else if (action === 'rename' || action === 'delete') {
         const entry = state.entries.find((entry) => entry.id === input.id);

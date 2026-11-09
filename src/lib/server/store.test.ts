@@ -38,6 +38,26 @@ describe('durable task stopwatch', () => {
     expect(JSON.parse(await readFile(file, 'utf8'))).toEqual(stopped);
   });
 
+  it('starts numbered sessions across dates without changing the original, including after a restart', async () => {
+    const first = await store.mutate({ action: 'start', revision: 0, label: 'Writing' });
+    now += 30_000;
+    const finished = await store.mutate({ action: 'stop', revision: 1 });
+    const original = finished.entries[0];
+    now += 86_400_000;
+    const again = await store.mutate({ action: 'repeat', revision: 2, id: first.entries[0].id });
+    expect(again.entries[0]).toMatchObject({ label: 'Writing #2', elapsedMs: 0, stoppedAt: null,
+      startedAt: new Date(now).toISOString(), segments: [{ startedAt: new Date(now).toISOString(), stoppedAt: null }] });
+    expect(again.entries[0].id).not.toBe(original.id);
+    expect(again.entries[1]).toEqual(original);
+    await expect(store.mutate({ action: 'repeat', revision: 3, id: original.id })).rejects.toMatchObject({ status: 409 });
+    expect(await store.read()).toEqual(again);
+    await store.mutate({ action: 'stop', revision: 3 });
+    store = createStore(file, () => now);
+    const third = await store.mutate({ action: 'repeat', revision: 4, id: original.id });
+    expect(third.entries[0].label).toBe('Writing #3');
+    expect(JSON.parse(await readFile(file, 'utf8'))).toEqual(third);
+  });
+
   it('continues running while the page or server is closed', async () => {
     await store.mutate({ action: 'start', revision: 0, label: 'Work' });
     now += 65_000;

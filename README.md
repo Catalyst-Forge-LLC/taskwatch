@@ -10,6 +10,15 @@ A private task stopwatch. Name what you are working on, pause when you step away
 
 On the public site, history stays in your browser. Taskwatch does not upload it. Export JSON when you want a backup. Import replaces the history in that browser after you confirm. Closing the tab does not stop an unfinished task, so pause or stop before you leave. Clearing site data removes the history.
 
+## Start another session
+
+Choose **Start again** beside a finished task to start timing immediately:
+`Writing` becomes `Writing #2`, then `Writing #3`. Choosing an older row uses the
+highest matching number still in history, across dates. Only a final ` #number`
+suffix is treated as a session number. Long names are shortened just enough to
+keep the new label within 160 characters. The original session and timestamps
+stay intact. Stop the current timer before starting another session.
+
 ## Run it yourself
 
 Requires Node.js 22.17 or newer.
