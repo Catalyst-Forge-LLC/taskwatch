@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
   import { activeEntry, duration, elapsed, todayElapsed, type Action, type WatchState } from '#lib/timer.ts';
-import { browserMode, browserStorage, getStorage } from '#lib/storage/index.ts';
-import { validate, StoreError } from '#lib/engine.ts';
+  import { browserMode, browserStorage, getStorage } from '#lib/storage/index.ts';
+  import { validate, StoreError } from '#lib/engine.ts';
   import type { Storage } from '#lib/storage/types.ts';
   import Footer from '#lib/Footer.svelte';
   import StopAt from '#lib/StopAt.svelte';
   import Weekly from '#lib/Weekly.svelte';
   import { sessionFamilies } from '#lib/sessions.ts';
+  import { timeRange } from '#lib/display.ts';
   import { recentStarts } from '#lib/recent.ts';
   import { tooltip } from '#lib/tooltip.ts';
 
@@ -20,6 +21,9 @@ import { validate, StoreError } from '#lib/engine.ts';
   let ready = $state(browserMode);
   let busy = $state(false);
   let message = $state('');
+  let readError = $state('');
+  let nameHint = $state(false);
+  let searchField = $state<HTMLInputElement>();
   let label = $state('');
   let recentOpen = $state(false);
   let nameField = $state<HTMLInputElement>();
@@ -33,6 +37,7 @@ import { validate, StoreError } from '#lib/engine.ts';
   let editLabel = $state('');
   let deleting = $state<string | null>(null);
   let lastSaved = $state<string | null>(null);
+  const saved = $derived(lastSaved ? watch.entries.find(e => e.id === lastSaved) : undefined);
   const active = $derived(activeEntry(watch));
   const recent = $derived(recentOpen && !active ? recentStarts(watch.entries, families, label) : []);
 
@@ -40,7 +45,8 @@ import { validate, StoreError } from '#lib/engine.ts';
     if (active) return;
     if (event.key === 'Escape') { recentOpen = false; return; }
     if (event.key !== 'ArrowDown') return;
-    recentOpen = true; await tick();
+    if (!watch.entries.length) return;
+    event.preventDefault(); recentOpen = true; await tick();
     suggestions?.querySelector('button')?.focus();
   }
   function navigateRecent(event: KeyboardEvent, index: number) {
@@ -59,11 +65,12 @@ import { validate, StoreError } from '#lib/engine.ts';
   function apply(payload: { state: WatchState; serverNow: number }, reset = false) {
     if (!reset && payload.state.revision < watch.revision) return;
     const previousId = active?.id;
+    const previousLabel = active?.label;
     watch = payload.state;
     offset = payload.serverNow - Date.now();
     now = Date.now() + offset;
-    if (active?.id !== previousId) label = active?.label ?? '';
-    ready = true;
+    if (active?.id !== previousId || (active && label === previousLabel)) label = active?.label ?? '';
+    readError = ''; ready = true;
   }
 
   async function refresh(reset = false) {
@@ -71,8 +78,8 @@ import { validate, StoreError } from '#lib/engine.ts';
       storage ??= await getStorage();
       apply(await storage.read(), reset);
     } catch (error) {
-      message = error instanceof Error ? error.message : 'Could not read your history.';
-      if (browserMode) ready = false;
+      readError = error instanceof Error ? error.message : 'Could not read your history.';
+      ready = false;
     }
   }
 
@@ -82,19 +89,21 @@ import { validate, StoreError } from '#lib/engine.ts';
     message = '';
     try {
       const payload = await storage.mutate({ action, revision: watch.revision, ...extra });
+      nameHint = false;
       lastSaved = action === 'stop' || action === 'stopAt' ? active?.id ?? null : null;
       apply(payload);
       editing = null;
       deleting = null;
       pendingImport = null;
-      if (action === 'repeat') {
+      if (action === 'repeat' || action === 'stopAt' || action === 'stop') {
         await tick();
         timerCard.focus({ preventScroll: true });
-        timerCard.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+        if (action === 'repeat') timerCard.scrollIntoView({ block: 'center', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
       }
     } catch (error) {
       if (error instanceof StoreError && error.status === 409) await refresh(true);
       message = error instanceof Error ? error.message : 'Could not save. Please try again.';
+      return message;
     }
     finally { busy = false; }
   }
@@ -134,7 +143,7 @@ import { validate, StoreError } from '#lib/engine.ts';
       // Keep the browser store in this bundle so the first read does not wait on another chunk.
       try { storage = browserStorage(); }
       catch (error) {
-        message = error instanceof Error ? error.message : 'Could not read your history.';
+        readError = error instanceof Error ? error.message : 'Could not read your history.';
         ready = false;
       }
     }
@@ -176,17 +185,20 @@ import { validate, StoreError } from '#lib/engine.ts';
 
   <main>
     <h1 class="sr-only">Task stopwatch</h1>
-    <p class="task-intro">Name a task, time the work, and keep a dated record.</p>
 
-    {#if message}
-      <div class="error" role="alert"><span>{message}</span><button onclick={() => { message = ''; void refresh(true); }}>Retry</button></div>
+
+    {#if message || readError}
+      <div class="error" role="alert"><span>{message || readError}</span>
+        {#if message}<button onclick={() => message = ''}>Dismiss</button>{:else}<button onclick={() => refresh(true)}>Retry loading history</button>{/if}
+      </div>
     {/if}
 
     <section class="timer-card" aria-label="Task stopwatch" tabindex="-1" bind:this={timerCard}>
-      <div class="timer-top"><span class:running class:paused={active && !running} class="status" aria-live="polite"><span></span>{busy ? 'Saving' : !ready && !browserMode ? 'Loading' : running ? 'Running' : active ? 'Paused' : 'Ready'}</span></div>
-      <form class="label-form" onfocusout={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) recentOpen = false; }} onsubmit={(event) => { event.preventDefault(); if (active) void act('rename', { id: active.id, label }); else void act('start', { label }); }}>
+      <div class="timer-top"><span class:running class:paused={active && !running} class="status" aria-live="polite"><span></span>{readError ? 'History unavailable' : busy ? 'Saving' : !ready ? 'Loading' : running ? 'Running' : active ? 'Paused' : 'Ready'}</span></div>
+      <form class="label-form" onfocusout={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) recentOpen = false; }} onsubmit={(event) => { event.preventDefault(); if (!label.trim()) { nameHint = true; recentOpen = false; nameField?.focus(); return; } if (active) void act('rename', { id: active.id, label }); else void act('start', { label }); }}>
         <label class="sr-only" for="task-label">Task name</label>
-        <div class="label-row"><input id="task-label" bind:this={nameField} bind:value={label} onfocus={() => recentOpen = true} onclick={() => recentOpen = true} oninput={() => recentOpen = true} onkeydown={nextSuggestion} maxlength="160" placeholder="What are you working on?" autocomplete="off" disabled={busy || !ready} />{#if active && label.trim() !== active.label}<button class="small-button" disabled={busy || !label.trim()} type="submit">Save</button>{/if}</div>
+        <div class="label-row"><input id="task-label" bind:this={nameField} bind:value={label} onfocus={() => recentOpen = true} onclick={() => recentOpen = true} oninput={() => { recentOpen = true; nameHint = false; }} aria-invalid={nameHint && !label.trim()} aria-describedby={nameHint && !label.trim() ? 'name-hint' : undefined} onkeydown={nextSuggestion} maxlength="160" placeholder="What are you working on?" autocomplete="off" disabled={busy || !ready} />{#if active && label.trim() !== active.label}<button class="small-button" disabled={busy || !label.trim()} type="submit">Save</button>{/if}</div>
+        {#if nameHint && !label.trim()}<p id="name-hint" role="alert">Enter a task name to {active ? 'save it' : 'start timing'}.</p>{/if}
         {#if recent.length}
           <div class="recent" bind:this={suggestions} role="group" aria-label="Start a recent task">
             <span>Start a recent task</span>
@@ -211,12 +223,17 @@ import { validate, StoreError } from '#lib/engine.ts';
           <button class="secondary" use:tooltip={'Finish this task and save it to history.'} onclick={() => act('stop')} disabled={busy}>{@render icon('stop', 22)} Stop</button>
         {/if}
       </div>
-      {#if active}{#key active.id}<StopAt entry={active} {now} {busy} onfinish={stoppedAt => act('stopAt', { id: active!.id, stoppedAt })}/>{/key}{/if}
-      <div class="timer-meta">{#if active}<span>Started {time(active.startedAt)} <span class="meta-date">· {date(active.startedAt)}</span></span>{/if}</div>
+      <div class="timer-meta">
+        {#if active}
+          <span>Started {time(active.startedAt)} · {date(active.startedAt)}</span>
+          {#key active.id}<StopAt entry={active} {now} {busy} onfinish={stoppedAt => act('stopAt', { id: active!.id, stoppedAt })}/>{/key}
+        {/if}
+        <span class="receipt" role="status">{#if !active && saved}<b>Saved</b> {saved.label} · {duration(saved.elapsedMs)}{/if}</span>
+      </div>
     </section>
 
     <section class="history" aria-label="Task history">
-      <div class="history-heading"><h2>History <span class="count">{completed.length}</span></h2><div class="history-tools"><label class="export import-button" use:tooltip={'Restore a JSON backup. Review it before replacing your history.'}>Import<input aria-label="Import JSON" type="file" accept=".json,application/json" onchange={selectImport} disabled={busy || (!ready && !browserMode)}/></label><button class="export" use:tooltip={'Download your history as a JSON backup.'} onclick={exportHistory} disabled={busy}>{@render icon('download', 17)} Export</button></div></div>
+      <div class="history-heading"><h2>History</h2><div class="history-tools"><label class="export import-button" use:tooltip={'Restore a JSON backup. Review it before replacing your history.'}>Import<input aria-label="Import JSON" type="file" accept=".json,application/json" onchange={selectImport} disabled={busy || (!ready && !browserMode)}/></label><button class="export" use:tooltip={'Download your history as a JSON backup.'} onclick={exportHistory} disabled={busy}>{@render icon('download', 17)} Export</button></div></div>
       {#if pendingImport}
         <div class="import-preview" role="region" aria-label="Confirm history import">
           <h3>Replace your history?</h3>
@@ -227,24 +244,30 @@ import { validate, StoreError } from '#lib/engine.ts';
         </div>
       {/if}
       {#if watch.entries.length}
-        <div class="views" role="group" aria-label="History view">
-          <button aria-pressed={historyView === 'sessions'} onclick={() => historyView = 'sessions'}>Sessions</button>
+        <div class="history-bar"><div class="views" role="group" aria-label="History view">
+          <button aria-pressed={historyView === 'sessions'} onclick={() => historyView = 'sessions'}>Sessions <span class="count">{completed.length}</span></button>
           <button aria-pressed={historyView === 'week'} onclick={() => historyView = 'week'}>This week</button>
+        </div>
+        {#if historyView === 'sessions' && completed.length}
+          <div class="search">{@render icon('search', 16)}<input bind:this={searchField} aria-label="Search task history" placeholder="Find a session…" bind:value={search}/>
+            {#if search}<button aria-label="Clear session search" onclick={() => { search = ''; searchField?.focus(); }}>Clear</button>{/if}
+          </div>
+        {/if}
         </div>
       {/if}
       {#if historyView === 'week' && watch.entries.length}
         <Weekly entries={watch.entries} {families} {now}/>
       {:else if completed.length > 0}
-        <div class="search">{@render icon('search', 17)}<input aria-label="Search task history" placeholder="Find a task…" bind:value={search}/></div>
         <div class="table-wrap"><table><thead><tr><th>Task</th><th>Date & start</th><th>Stopped</th><th class="elapsed-col">Elapsed</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
           {#each filtered as entry (entry.id)}
             <tr class:just-saved={entry.id === lastSaved}><td class="task-cell">
               {#if editing === entry.id}<form class="edit-form" onsubmit={(event) => { event.preventDefault(); void act('rename', { id: entry.id, label: editLabel }); }}><input aria-label="New task label" bind:value={editLabel} maxlength="160"/><button class="small-button" disabled={busy || !editLabel.trim()}>Save</button><button class="text-button" type="button" onclick={() => { editing = null; }}>Cancel</button></form>
               {:else}
+                {@const singleSpan = entry.segments.length === 1 && entry.segments[0].stoppedAt === entry.stoppedAt}
                 <strong>{entry.label}</strong>
                 <details><summary><span class="phone-only">{date(entry.startedAt)} · Details</span><span class="desktop-only">{entry.segments.length} work {entry.segments.length === 1 ? 'interval' : 'intervals'}</span></summary>
-                  <div class="phone-only"><p>Started: {date(entry.startedAt)} · {time(entry.startedAt)}</p><p>Stopped: {date(entry.stoppedAt!)} · {time(entry.stoppedAt!)}</p><b>Work intervals</b></div>
-                  {#each entry.segments as segment}<p>{date(segment.startedAt)} · {time(segment.startedAt)} → {date(segment.stoppedAt!)} · {time(segment.stoppedAt!)}</p>{/each}
+                  <div class="phone-only"><p>Started: {date(entry.startedAt)} · {time(entry.startedAt)}</p><p>Stopped: {date(entry.stoppedAt!)} · {time(entry.stoppedAt!)}</p>{#if singleSpan}<b>1 work interval</b>{:else}<b>Work intervals</b>{/if}</div>
+                  {#each entry.segments as segment}<p class:duplicate-span={singleSpan}>{timeRange(segment.startedAt, segment.stoppedAt)}</p>{/each}
                 </details>
               {/if}
             </td><td class="stamp-cell"><span>{date(entry.startedAt)}</span><small>{time(entry.startedAt)}</small></td><td class="stamp-cell"><span>{date(entry.stoppedAt!)}</span><small>{time(entry.stoppedAt!)}</small></td><td class="elapsed-col"><span class="duration">{duration(entry.elapsedMs)}</span></td><td class="row-actions">
@@ -256,9 +279,9 @@ import { validate, StoreError } from '#lib/engine.ts';
                 <button class="icon-button" aria-label={`Rename ${entry.label}`} use:tooltip={'Rename task'} disabled={busy} onclick={() => { editing = entry.id; editLabel = entry.label; deleting = null; }}>{@render icon('edit', 16)}</button><button class="icon-button" aria-label={`Delete ${entry.label}`} use:tooltip={'Delete task — confirmation required'} disabled={busy} onclick={() => { deleting = entry.id; editing = null; }}>{@render icon('trash', 16)}</button>{/if}
             </td></tr>
           {/each}
-        </tbody></table>{#if !filtered.length}<p class="no-results">No tasks match “{search}”.</p>{/if}</div>
+        </tbody></table>{#if !filtered.length}<p class="no-results">No sessions match “{search}”.</p>{/if}</div>
       {:else}
-        <div class="empty">{@render icon('watch', 22)}<p>No sessions yet.</p></div>
+        <div class="empty">{@render icon('watch', 22)}<p>{active ? 'Stop the timer to add this session to history.' : 'Name a task and start the timer. Finished sessions appear here.'}</p></div>
       {/if}
     </section>
     <Footer />
@@ -284,10 +307,12 @@ import { validate, StoreError } from '#lib/engine.ts';
   .today>span { font-size: 12px; }
   .today strong { color: #36533e; font-size: 18px; font-weight: 550; font-variant-numeric: tabular-nums; letter-spacing: -.4px; }
   main { padding-top: 18px; }
-  .task-intro { margin: 0 0 1.25rem; color: #526650; font-size: .9375rem; line-height: 1.6; text-align: center; }
+  #name-hint{color:#88412e;font-size:13px;text-align:center;margin:8px 0 0}
   .timer-card { background: #fff; border: 1px solid #e0e6dc; border-radius: 28px; box-shadow: 0 12px 45px #243c3007, 0 2px 4px #243c3003; padding: 30px 36px 24px; }
   .timer-top { display: flex; justify-content: center; min-height: 26px; }
   .status { display: inline-flex; align-items: center; gap: 7px; color: #6c7d6b; font-size: 12px; font-weight: 500; }
+  .status { padding:4px 10px; border-radius:999px; background:#f1f4ed; color:#4c614b; }
+  .status.running{background:#ecf5e9}.status.paused{background:#fff4de}
   .status>span { width: 6px; height: 6px; background: #9eab98; border-radius: 50%; }
   .status.running { color: #346849; }
   .status.running>span { background: #558654; box-shadow: 0 0 0 4px #ecf3e6; }
@@ -312,15 +337,16 @@ import { validate, StoreError } from '#lib/engine.ts';
   .primary:disabled { background: #e0e8db; border-color: #e0e8db; color: #73866c; box-shadow: none; opacity: 1; }
   .secondary { border: 1px solid #dce5d6; background: #f4f7ef; color: #3e5c42; }
   .secondary:hover:not(:disabled) { background: #eaf0e3; border-color: #cad9c0; }
-  .timer-meta { display: flex; justify-content: center; align-items: end; min-height: 42px; font-size: 11px; color: #83907d; font-variant-numeric: tabular-nums; }
-  .meta-date { color: #9aa394; }
+  .timer-meta { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:4px 12px; margin-top:12px; color:#53694e; font-size:12px; font-variant-numeric:tabular-nums; }
+  .timer-meta:has(.receipt:only-child:empty){display:none}.receipt:empty{position:absolute}.receipt{max-width:100%;overflow-wrap:anywhere}.receipt b{color:#245b42;margin-right:4px}
   .history { margin-top: 32px; }
-  .views{display:inline-flex;gap:3px;padding:3px;border-radius:10px;background:#e9eee4;margin-bottom:14px}
+  .history-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .views{display:inline-flex;gap:3px;padding:3px;border-radius:10px;background:#e9eee4}
   .views button{border:0;border-radius:7px;padding:7px 13px;background:transparent;color:#53694e;font-size:12px}
   .views button[aria-pressed=true]{background:white;color:#24482e;box-shadow:0 1px 4px #253a2a18}
   .history-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
   .history-heading h2 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.4px; }
-  .count { color: #7b8972; background: #e9eee3; border-radius: 7px; min-width: 24px; padding: 3px 7px; font-size: 11px; font-weight: 500; text-align: center; letter-spacing: 0; }
+  .count { color: #4b6046; background: #e9eee3; border-radius: 7px; min-width: 24px; padding: 3px 7px; font-size: 11px; font-weight: 500; text-align: center; letter-spacing: 0; }
   .history-tools { display: flex; gap: 6px; }
   .export { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 36px; padding: 0 12px; border: 1px solid transparent; border-radius: 8px; color: #64755e; background: transparent; font-size: 12px; white-space: nowrap; }
   .export:hover { background: #eaf0e3; border-color: #e0e7d8; color: #35563e; }
@@ -335,17 +361,17 @@ import { validate, StoreError } from '#lib/engine.ts';
   .text-button { border: 0; background: transparent; color: #63745a; font-size: 12px; padding: 8px; }
   .empty { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 30px 20px; border: 1px solid #e1e7da; border-radius: 16px; color: #8a987d; background: #fafbf7; }
   .empty p { margin: 0; color: #7e8c73; font-size: 13px; }
-  .search { display: flex; align-items: center; gap: 9px; color: #7e8d73; margin: 0 0 14px; }
-  .search input { border: 0; border-bottom: 1px solid #dce4d4; border-radius: 0; background: transparent; padding: 9px 0; width: 220px; color: #3f5135; font-size: 12px; }
+  .search {display:flex;align-items:center;gap:7px;max-width:100%;min-width:0;color:#576c51;border-bottom:1px solid #ccd7c6}.search:focus-within{border-color:#497754}.search button{border:0;background:transparent;color:#36573d;padding:8px;font-size:12px}
+  .search input { border: 0; border-radius: 0; background: transparent; padding: 9px 0; width: 155px; min-width:0; color: #3f5135; font-size: 12px; }
   .search input:focus-visible { outline: 0; border-color: #497754; }
   .table-wrap { overflow-x: auto; border: 1px solid #e0e6d9; border-radius: 16px; background: #fff; }
   .phone-only { display:none; }
   table { border-collapse: collapse; width: 100%; text-align: left; }
-  th { color: #78876c; background: #f5f7f0; font-size: 11px; padding: 15px 18px; font-weight: 500; }
+  th { color: #59694f; background: #f5f7f0; font-size: 11px; padding: 15px 18px; font-weight: 500; }
   td { padding: 18px; border-top: 1px solid #edf0e7; font-size: 12px; vertical-align: top; white-space: nowrap; color: #52624a; }
   td.task-cell { min-width: 180px; max-width: 320px; white-space: normal; }
   td strong { color: #2d4733; font-weight: 550; font-size: 14px; overflow-wrap: anywhere; }
-  td small { display: block; margin-top: 6px; color: #829174; font-size: 11px; font-variant-numeric: tabular-nums; }
+  td small { display: block; margin-top: 6px; color: #61705a; font-size: 11px; font-variant-numeric: tabular-nums; }
   .elapsed-col { text-align: right; }
   .duration { font-size: 17px; font-weight: 550; font-variant-numeric: tabular-nums; color: #365b3c; }
   .row-actions { text-align: right; max-width: 200px; }
@@ -356,9 +382,9 @@ import { validate, StoreError } from '#lib/engine.ts';
   .repeat-button:disabled { pointer-events: none; }
   .icon-button { border: 0; background: transparent; color: #819175; border-radius: 7px; padding: 6px; min-width: 32px; min-height: 32px; }
   .icon-button:hover { color: #29583d; background: #f0f5e9; }
-  details { margin-top: 7px; color: #7b8b6e; font-size: 10px; }
+  details { margin-top: 7px; color: #5b7053; font-size: 12px; }
   summary { cursor: pointer; }
-  details p { font-size: 10px; line-height: 1.8; margin: 6px 0; overflow-wrap: anywhere; }
+  details p { font-size: 12px; line-height: 1.8; margin: 6px 0; overflow-wrap: anywhere; }
   .edit-form { display: flex; flex-wrap: wrap; gap: 5px; }
   .edit-form input { border: 1px solid #cbd9bf; border-radius: 6px; min-width: 0; width: 100%; padding: 9px; color: #304d33; }
   .edit-form input:focus-visible { outline: 2px solid #74a084; }
@@ -396,7 +422,8 @@ import { validate, StoreError } from '#lib/engine.ts';
     .controls { gap: 10px; }
     .start-trigger{flex:1;max-width:210px}.start-trigger>.primary{width:100%}
     .primary, .secondary { min-width: 0; flex: 1; max-width: 210px; height: 58px; font-size: 16px; border-radius: 12px; gap: 9px; }
-    .timer-meta { font-size: 10px; min-height: 36px; }
+    .timer-meta { font-size:12px; }
+    .history-bar{align-items:stretch}.search {flex:1 1 140px}.search input{width:100%;flex:1}.views button{min-height:38px}
     .history { margin-top: 27px; }
     .history-heading { gap: 10px; }
     .history-heading h2 { font-size: 17px; }
@@ -404,7 +431,7 @@ import { validate, StoreError } from '#lib/engine.ts';
     .empty { padding: 26px 15px; }
     .table-wrap { overflow:visible; background:transparent; border:0; }
     table, tbody { display:block; }
-    thead, .stamp-cell, .desktop-only { display:none; }
+    thead, .stamp-cell, .desktop-only, .duplicate-span { display:none; }
     tbody { display:grid; gap:10px; }
     tbody tr { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:6px 10px; border:1px solid #dce5d6; border-radius:14px; background:white; padding:14px; }
     td, td.task-cell, td.row-actions { border:0; min-width:0; max-width:none; padding:0; }

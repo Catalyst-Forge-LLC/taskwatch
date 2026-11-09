@@ -6,7 +6,7 @@
   <p>The public Taskwatch app stores labels, timestamps, and task history in this browser on this device. Taskwatch does not upload your task content. There are no accounts, cloud sync, ads, or application analytics.</p>
   <h2>Keep a backup</h2>
   <p>Clearing site data, switching browsers, or using a private browsing session can remove or separate your history. Export JSON to keep a backup. Import JSON lets you restore it or move it between devices. An import replaces the current history only after you confirm.</p>
-  <p>An unfinished task keeps accruing working time while the tab is closed. Pause or stop before leaving if you do not want that time counted.</p>
+  <p>An unfinished task keeps accruing working time while the tab is closed. Pause or stop before leaving. If you forget, use <strong>Stop at…</strong> and choose when you actually finished; you can review the working time before saving.</p>
   <h2>Each address is separate</h2>
   <p>Your local app, the workers.dev address, and any custom domain have separate browser storage. Export from the old address and import at the new one when moving. Two devices do not sync.</p>
   <h2>Hosting</h2>
