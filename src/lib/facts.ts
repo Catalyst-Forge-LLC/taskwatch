@@ -120,22 +120,86 @@ export const featureFacts = {
       "documentation": "partial",
       "tests": "partial",
       "evidence_state": "declared"
+    },
+    {
+      "id": "correct-finish",
+      "name": "Preview and save an earlier finish time",
+      "lifecycle": "released",
+      "availability": "conditional",
+      "conditions": [
+        {
+          "kind": "other",
+          "value": "Current browser; HTTPS or localhost for browser writes"
+        }
+      ],
+      "maturity": "experimental",
+      "documentation": "partial",
+      "tests": "partial",
+      "evidence_state": "declared"
+    },
+    {
+      "id": "weekly-totals",
+      "name": "Weekly working time by task with session details",
+      "lifecycle": "released",
+      "availability": "conditional",
+      "conditions": [
+        {
+          "kind": "other",
+          "value": "Current browser; HTTPS or localhost for browser writes"
+        }
+      ],
+      "maturity": "experimental",
+      "documentation": "partial",
+      "tests": "partial",
+      "evidence_state": "declared"
+    },
+    {
+      "id": "recent-starts",
+      "name": "One-click recent tasks from the name field",
+      "lifecycle": "released",
+      "availability": "conditional",
+      "conditions": [
+        {
+          "kind": "other",
+          "value": "Current browser; HTTPS or localhost for browser writes"
+        }
+      ],
+      "maturity": "experimental",
+      "documentation": "partial",
+      "tests": "partial",
+      "evidence_state": "declared"
+    },
+    {
+      "id": "mobile-history",
+      "name": "Phone history cards with timestamps and work intervals",
+      "lifecycle": "released",
+      "availability": "conditional",
+      "conditions": [
+        {
+          "kind": "other",
+          "value": "Current browser; HTTPS or localhost for browser writes"
+        }
+      ],
+      "maturity": "experimental",
+      "documentation": "partial",
+      "tests": "partial",
+      "evidence_state": "declared"
     }
   ],
   "basis": {
     "kind": "declaration",
-    "summary": "Assistant-authored capability selection based on Taskwatch source, README, 15 passing tests, and exercised browser journeys."
+    "summary": "Assistant-authored capability selection based on Taskwatch source, documentation, and verification of timer behavior."
   },
   "declaration": {
     "actor": "Codex (assistant)",
     "source": "Owner request in Taskwatch chat to publish xFacts labels; source review and checks in this workspace. Numbered sessions added at the owner request on 2026-11-09; shared engine and both storage modes checked.",
-    "recorded_at": "2026-11-09T13:03:57Z"
+    "recorded_at": "2026-11-09T15:03:22+00:00"
   },
   "verification_limits": "This is an attributed standalone declaration, not an independent audit or a complete feature inventory. Tests and documentation are partially assessed; no register-wide coverage or ongoing source-freshness claim is made.",
   "generated": {
     "date": "2026-11-09",
     "generator": "Taskwatch label script",
     "generator_version": "1.0.0",
-    "projection_fingerprint": "18bb4bb26bdb4122caba7c63b964b76e97c675757fd19ef3ba37ee588f2e7150"
+    "projection_fingerprint": "3ac040d6efbd7d65238347837b5c4723e102581cab2f6cc2f6ac69001c74526c"
   }
 };
