@@ -12,6 +12,10 @@ On the public site, history stays in your browser. Taskwatch does not upload it.
 
 ## Start another session
 
+If you forgot to stop a running or paused timer, choose **Stop at…**, enter the
+actual local finish time, and review the working duration before saving. Breaks
+do not count, and any intervals after that finish are discarded.
+
 Choose **Start again** beside a finished task to start timing immediately:
 `Writing` becomes `Writing #2`, then `Writing #3`. Choosing an older row uses the
 highest matching number still in history, across dates. Only a final ` #number`

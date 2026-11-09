@@ -5,6 +5,7 @@ import { browserMode, browserStorage, getStorage } from '#lib/storage/index.ts';
 import { validate, StoreError } from '#lib/engine.ts';
   import type { Storage } from '#lib/storage/types.ts';
   import Footer from '#lib/Footer.svelte';
+  import StopAt from '#lib/StopAt.svelte';
   import { tooltip } from '#lib/tooltip.ts';
 
   let storage: Storage | undefined;
@@ -50,13 +51,13 @@ import { validate, StoreError } from '#lib/engine.ts';
     }
   }
 
-  async function act(action: Action, extra: { label?: string; id?: string; data?: WatchState } = {}) {
+  async function act(action: Action, extra: { label?: string; id?: string; data?: WatchState; stoppedAt?: string } = {}) {
     if (busy || (!ready && !(browserMode && action === 'import')) || !storage) return;
     busy = true;
     message = '';
     try {
       const payload = await storage.mutate({ action, revision: watch.revision, ...extra });
-      lastSaved = action === 'stop' ? active?.id ?? null : null;
+      lastSaved = action === 'stop' || action === 'stopAt' ? active?.id ?? null : null;
       apply(payload);
       editing = null;
       deleting = null;
@@ -174,6 +175,7 @@ import { validate, StoreError } from '#lib/engine.ts';
           <button class="secondary" use:tooltip={'Finish this task and save it to history.'} onclick={() => act('stop')} disabled={busy}>{@render icon('stop', 22)} Stop</button>
         {/if}
       </div>
+      {#if active}{#key active.id}<StopAt entry={active} {now} {busy} onfinish={stoppedAt => act('stopAt', { id: active!.id, stoppedAt })}/>{/key}{/if}
       <div class="timer-meta">{#if active}<span>Started {time(active.startedAt)} <span class="meta-date">· {date(active.startedAt)}</span></span>{/if}</div>
     </section>
 

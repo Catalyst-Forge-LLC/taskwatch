@@ -39,7 +39,20 @@ export function validate(value: unknown): WatchState {
 }
 
 
-export type Mutation = { action?: unknown; revision?: unknown; label?: unknown; id?: unknown; data?: unknown };
+export type Mutation = { action?: unknown; revision?: unknown; label?: unknown; id?: unknown; data?: unknown; stoppedAt?: unknown };
+
+// The preview and both stores use the same cutoff, including cuts inside a break.
+export function finishAt(entry: Entry, cutoff: number, now: number): Entry {
+  if (!Number.isFinite(cutoff)) throw new StoreError('Choose a valid local finish date and time.');
+  if (cutoff < Date.parse(entry.startedAt)) throw new StoreError('The finish must be on or after the start.');
+  if (cutoff > now) throw new StoreError('The finish cannot be in the future.');
+  const stamp = new Date(cutoff).toISOString();
+  const segments = entry.segments.filter(s => Date.parse(s.startedAt) <= cutoff).map(s => ({
+    ...s, stoppedAt: s.stoppedAt && Date.parse(s.stoppedAt) <= cutoff ? s.stoppedAt : stamp
+  }));
+  const finished = { ...entry, stoppedAt: stamp, segments };
+  return { ...finished, elapsedMs: elapsed(finished, cutoff) };
+}
 
 // Resolve numbering inside the storage transaction, including when an older
 // entry is chosen or multiple tabs try to start another session.
@@ -106,6 +119,10 @@ export function transition(current: WatchState, input: Mutation, now = Date.now(
           if (!entry.stoppedAt) throw new StoreError('Stop the task before deleting it.');
           state.entries = state.entries.filter((item) => item.id !== entry.id);
         }
+      } else if (action === 'stopAt') {
+        if (!active || active.id !== input.id) throw new StoreError('The active task has changed. Check the timer and try again.', 409);
+        const cutoff = typeof input.stoppedAt === 'string' ? Date.parse(input.stoppedAt) : NaN;
+        Object.assign(active, finishAt(active, cutoff, now));
       } else if (action === 'pause' || action === 'resume' || action === 'stop') {
         if (!active) throw new StoreError('There is no active task.', 409);
         const running = active.segments.at(-1)!.stoppedAt === null;
