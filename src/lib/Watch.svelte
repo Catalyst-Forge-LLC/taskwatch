@@ -6,6 +6,8 @@ import { validate, StoreError } from '#lib/engine.ts';
   import type { Storage } from '#lib/storage/types.ts';
   import Footer from '#lib/Footer.svelte';
   import StopAt from '#lib/StopAt.svelte';
+  import Weekly from '#lib/Weekly.svelte';
+  import { sessionFamilies } from '#lib/sessions.ts';
   import { tooltip } from '#lib/tooltip.ts';
 
   let storage: Storage | undefined;
@@ -19,6 +21,8 @@ import { validate, StoreError } from '#lib/engine.ts';
   let message = $state('');
   let label = $state('');
   let search = $state('');
+  let historyView = $state<'sessions' | 'week'>('sessions');
+  const families = $derived(sessionFamilies(watch.entries));
   let now = $state(Date.now());
   let offset = 0;
   let editing = $state<string | null>(null);
@@ -190,7 +194,15 @@ import { validate, StoreError } from '#lib/engine.ts';
           <div><button class="small-button" onclick={exportHistory} disabled={busy}>Export current history</button><button class="small-button" onclick={() => act('import', { data: $state.snapshot(pendingImport!.state) })} disabled={busy}>Replace history</button><button class="text-button" onclick={() => { pendingImport = null; }}>Cancel</button></div>
         </div>
       {/if}
-      {#if completed.length > 0}
+      {#if watch.entries.length}
+        <div class="views" role="group" aria-label="History view">
+          <button aria-pressed={historyView === 'sessions'} onclick={() => historyView = 'sessions'}>Sessions</button>
+          <button aria-pressed={historyView === 'week'} onclick={() => historyView = 'week'}>This week</button>
+        </div>
+      {/if}
+      {#if historyView === 'week' && watch.entries.length}
+        <Weekly entries={watch.entries} {families} {now}/>
+      {:else if completed.length > 0}
         <div class="search">{@render icon('search', 17)}<input aria-label="Search task history" placeholder="Find a task…" bind:value={search}/></div>
         <div class="table-wrap"><table><thead><tr><th>Task</th><th>Date & start</th><th>Stopped</th><th class="elapsed-col">Elapsed</th><th><span class="sr-only">Actions</span></th></tr></thead><tbody>
           {#each filtered as entry (entry.id)}
@@ -262,6 +274,9 @@ import { validate, StoreError } from '#lib/engine.ts';
   .timer-meta { display: flex; justify-content: center; align-items: end; min-height: 42px; font-size: 11px; color: #83907d; font-variant-numeric: tabular-nums; }
   .meta-date { color: #9aa394; }
   .history { margin-top: 32px; }
+  .views{display:inline-flex;gap:3px;padding:3px;border-radius:10px;background:#e9eee4;margin-bottom:14px}
+  .views button{border:0;border-radius:7px;padding:7px 13px;background:transparent;color:#53694e;font-size:12px}
+  .views button[aria-pressed=true]{background:white;color:#24482e;box-shadow:0 1px 4px #253a2a18}
   .history-heading { display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-bottom: 16px; }
   .history-heading h2 { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -.4px; }
   .count { color: #7b8972; background: #e9eee3; border-radius: 7px; min-width: 24px; padding: 3px 7px; font-size: 11px; font-weight: 500; text-align: center; letter-spacing: 0; }

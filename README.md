@@ -25,6 +25,11 @@ stay intact. Stop the current timer before starting another session.
 
 ## Run it yourself
 
+Under History, choose **This week** to see working time grouped by task name,
+including numbered repeats and the current timer. The week starts at local
+midnight on Monday. Expand a total to see the sessions and timestamps behind it;
+for sessions spanning the boundary, only work inside this week counts.
+
 Requires Node.js 22.17 or newer.
 
 ```bash

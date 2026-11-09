@@ -1,4 +1,5 @@
 import { activeEntry, elapsed, type Action, type Entry, type WatchState } from './timer';
+import { numberedSession } from './sessions';
 
 export class StoreError extends Error {
   constructor(message: string, public status = 400) { super(message); }
@@ -57,11 +58,10 @@ export function finishAt(entry: Entry, cutoff: number, now: number): Entry {
 // Resolve numbering inside the storage transaction, including when an older
 // entry is chosen or multiple tabs try to start another session.
 export function nextSessionLabel(source: string, entries: Entry[]): string {
-  const numbered = /^(.*\S) #(\d+)$/;
-  const base = source.match(numbered)?.[1] ?? source;
+  const base = source.match(numberedSession)?.[1] ?? source;
   let highest = 1n;
   for (const entry of entries) {
-    const match = entry.label.match(numbered);
+    const match = entry.label.match(numberedSession);
     if (!match) continue;
     const suffix = ` #${match[2]}`;
     if (match[1] === base.slice(0, 160 - suffix.length).trimEnd()) {
